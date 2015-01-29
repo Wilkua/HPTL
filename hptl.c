@@ -20,6 +20,7 @@
  * only made available for quick-and-dirty timing testing.
  *
  *********************************************************************************/
+
 #if defined(__WIN32) || defined(_WIN32) || defined(WIN32)
 #define PLATFORM_WIN32 1
 #define WIN32_LEAN_AND_MEAN 1
@@ -37,12 +38,17 @@
 extern "C" {
 #endif
 void init_performance_info(struct performance_info *pi) {
+  if (pi == (void*)0)
+    return;
+
   pi->start_clock = 0;
   pi->end_clock = 0;
   pi->clock_freq = 0;
 
 #if defined(PLATFORM_WIN32)
-  // Win32 code
+  LARGE_INTEGER tmp;
+  QueryPerformanceFrequency(&tmp);
+  pi->clock_freq = tmp.QuadPart;
 #endif
 #if defined(PLATFORM_LINUX)
   struct timespec tmp;
@@ -63,8 +69,13 @@ void init_performance_info(struct performance_info *pi) {
 extern "C" {
 #endif
 void performance_start(struct performance_info *pi) {
+  if (pi == (void*)0)
+    return;
+
 #if defined(PLATFORM_WIN32)
-  // Win32 code
+  LARGE_INTEGER tmp;
+  QueryPerformanceCounter(&tmp);
+  pi->start_clock = tmp.QuadPart;
 #endif
 #if defined(PLATFORM_LINUX)
   struct timespec tmp;
@@ -85,8 +96,13 @@ void performance_start(struct performance_info *pi) {
 extern "C" {
 #endif
 void performance_stop(struct performance_info *pi) {
+  if (pi == (void*)0)
+    return;
+
 #if defined(PLATFORM_WIN32)
-  // Win32 code
+  LARGE_INTEGER tmp;
+  QueryPerformanceCounter(&tmp);
+  pi->end_clock = tmp.QuadPart;
 #endif
 #if defined(PLATFORM_LINUX)
   struct timespec tmp;
@@ -107,10 +123,30 @@ void performance_stop(struct performance_info *pi) {
 extern "C" {
 #endif
 double performance_duration(struct performance_info *pi) {
+#if defined(PLATFORM_WIN32)
   if (pi != (void*)0) {
-    return (double)((double)(pi->end_clock - pi->start_clock) /
+    /* period = 1 / freq
+     * elapsed ticks = end - start
+     * elapsed nanoseconds = elapsed ticks * period
+     * elapsed microseconds = 1000 * elapsed ticks * period
+     * Mathematic expansion:
+     *    elapsed microseconds = ((end - start) * 1000) / freq
+     * since period is 1 / freq -> elapsed ticks * period == elapsed ticks / freq
+     */
+    return (((double)(pi->end_clock - pi->start_clock) * 1000.0f) /
+      (double)pi->clock_freq);
+  }
+#endif
+#if defined(PLATFORM_LINUX)
+  /* Linux expresses it's high-resolution timers in terms of
+   * seconds and nanoseconds. Therefore, no conversions are necesarry,
+   * other than nanoseconds to microseconds.
+   */
+  if (pi != (void*)0) {
+    return ((double)(pi->end_clock - pi->start_clock) /
       (double)pi->clock_freq) / 1000.0f;
   }
+#endif
   return 0;
 }
 #if defined(__cplusplus)
